@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * @file
+ * Contains form_auto_fill.module..
+ */
+
+use Drupal\Core\Entity\ContentEntityForm;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Link;
+
+/**
+ * Implements hook_entity_prepare_form().
+ *
+ * Randomly fills each required field with a random value. For file fields,
+ * use default objects provided by the module.
+ * The random filling, skips all entity keys except from the label as they
+ * should not be handled within the form.
+ */
+function form_auto_fill_entity_prepare_form(EntityInterface $entity, $operation, FormStateInterface $form_state) {
+  if (!$entity->isNew() || (!($entity instanceof ContentEntityInterface))) {
+    return;
+  }
+
+  $form_auto_fill_service = \Drupal::service('form_auto_fill.form_fill');
+  if (empty(($form_auto_fill_service->getFormId()))) {
+    $form_auto_fill_service->setFormId($form_state->getFormObject()
+      ->getFormId());
+  }
+  if ($form_auto_fill_service->getFormId() != $form_state->getFormObject()
+      ->getFormId()
+  ) {
+    return;
+  }
+
+  if (empty($form_auto_fill_service->getEntity())) {
+    $form_auto_fill_service->setEntity($entity);
+  }
+  if ($form_auto_fill_service->applies() && !$form_auto_fill_service->isManual()) {
+    $form_auto_fill_service->fillEntityFields();
+    $entity = $form_auto_fill_service->getEntity();
+  }
+
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function form_auto_fill_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  $form_auto_fill_service = \Drupal::service('form_auto_fill.form_fill');
+  if (!$form_auto_fill_service->applies() || !$form_auto_fill_service->isManual() || !($form_state->getBuildInfo()['callback_object'] instanceof ContentEntityForm)) {
+    return;
+  }
+
+  $form['form_auto_fill_container'] = [
+    '#type' => 'container',
+    '#weight' => -10,
+    '#access' => \Drupal::currentUser()->hasPermission('use auto form fill'),
+  ];
+
+  $form['form_auto_fill_container']['form_auto_fill_submit'] = [
+    '#type' => 'submit',
+    '#value' => t('Auto fill'),
+    '#limit_validation_errors' => [],
+    '#weight' => 0,
+  ];
+  $form['form_auto_fill_container']['form_auto_fill_submit']['#submit'][] = 'form_auto_fill_form_alter_submit';
+
+  if (\Drupal::currentUser()->hasPermission('administer form auto fill settings')) {
+    $link = Link::createFromRoute('settings form', 'form_auto_fill.form_auto_fill_settings_form')->toString();
+    $form['form_auto_fill_container']['admin_details'] = [
+      '#type' => 'item',
+      '#markup' => "To change settings for the auto fill, please go to $link.",
+      '#weight' => 1,
+    ];
+
+    $form['form_auto_fill_container']['#description'] = t('To change settings for the auto fill, please go to :settings_url.', [':settings_url' => $link]);
+  }
+}
+
+/**
+ * Submit handler for the form_auto_fill_submit button. Auto fills the entity.
+ */
+function form_auto_fill_form_alter_submit(&$form, FormStateInterface $form_state) {
+  $build_info = $form_state->getBuildInfo();
+
+  // Re-initialize the service.
+  $form_auto_fill_service = \Drupal::service('form_auto_fill.form_fill');
+  $form_auto_fill_service->setEntity($build_info['callback_object']->getEntity());
+
+  // Update entity and set the flag to fill the form.
+  $form_auto_fill_service->fillEntityFields();
+  $entity_values = $form_auto_fill_service->getEntity()->toArray();
+  $form_state->setUserInput($entity_values);
+  $form_state->setRebuild();
+}

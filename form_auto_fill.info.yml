@@ -1,0 +1,5 @@
+name: Form auto fill
+type: module
+description: Simple module to fill content entity forms with randomized values.
+core: 8.x
+package: Form auto fill
