@@ -5,6 +5,7 @@ namespace Drupal\form_auto_fill;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Field\FieldDefinitionInterface;
 
 /**
  * FormFill service.
@@ -160,7 +161,7 @@ class FormFill {
 
     $field_definitions = $this->entity->getFieldDefinitions();
     foreach ($field_definitions as $id => $field_definition) {
-      if (in_array($id, $keys_to_skip)) {
+      if (in_array($id, $keys_to_skip) || $field_definition->getType() == 'state') {
         continue;
       }
 
